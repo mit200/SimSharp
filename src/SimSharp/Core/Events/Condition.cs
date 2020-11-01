@@ -28,7 +28,7 @@ namespace SimSharp {
       : this(environment, (IEnumerable<Event>)events) { }
     protected Condition(Simulation environment, IEnumerable<Event> events)
       : base(environment) {
-      CallbackList.Add(CollectValues);
+      CallbackList.Add(new EventAction(CollectValues));
       Events = new List<Event>(events);
       FiredEvents = new List<Event>();
 

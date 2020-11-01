@@ -1,15 +1,8 @@
-﻿#region License Information
-/*
- * This file is part of SimSharp which is licensed under the MIT license.
- * See the LICENSE file in the project root for more information.
- */
-#endregion
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace SimSharp {
+namespace SimSharp.Async {
   /// <summary>
   /// A Process handles the iteration of events. Processes may define steps that
   /// a certain entity in the simulation has to perform. Each time the process
@@ -20,8 +13,8 @@ namespace SimSharp {
   /// retrieve the associated Process through the ActiveProcess property of the
   /// environment. Each Process sets and resets that property during Resume.
   /// </remarks>
-  public class Process : ProcessBase {
-    private readonly IEnumerator<Event> generator;
+  public class ProcessAsync : ProcessBase {
+    private readonly IAsyncEnumerator<Event> generator;
 
     /// <summary>
     /// Sets up a new process.
@@ -31,20 +24,20 @@ namespace SimSharp {
     /// <param name="environment">The environment in which the process lives.</param>
     /// <param name="generator">The generator function of the process.</param>
     /// <param name="priority">The priority if multiple processes are started at the same time.</param>
-    public Process(Simulation environment, IEnumerable<Event> generator, int priority = 0)
+    public ProcessAsync(Simulation environment, IAsyncEnumerable<Event> generator, int priority = 0)
       : base(environment, priority) {
-      this.generator = generator.GetEnumerator();
+      this.generator = generator.GetAsyncEnumerator();
     }
 
-    protected override Task Resume(Event @event) {
+    protected override async Task Resume(Event @event) {
       Environment.ActiveProcess = this;
       while (true) {
         if (@event.IsOk) {
-          if (generator.MoveNext()) {
+          if (await generator.MoveNextAsync()) {
             if (IsTriggered) {
               // the generator called e.g. Environment.ActiveProcess.Fail
               Environment.ActiveProcess = null;
-              return Task.CompletedTask;
+              return;
             }
             if (!ProceedToEvent()) {
               @event = Target;
@@ -65,11 +58,11 @@ namespace SimSharp {
           IsOk = false;
           Value = @event.Value;
 
-          if (generator.MoveNext()) {
+          if (await generator.MoveNextAsync()) {
             if (IsTriggered) {
               // the generator called e.g. Environment.ActiveProcess.Fail
               Environment.ActiveProcess = null;
-              return Task.CompletedTask;
+              return;
             }
             // if we move next, but IsOk is still false
             if (!IsOk) throw new InvalidOperationException("The process did not react to being faulted.");
@@ -83,8 +76,6 @@ namespace SimSharp {
         }
       }
       Environment.ActiveProcess = null;
-
-      return Task.CompletedTask;
     }
     
     protected override bool ProceedToEvent() {
@@ -96,9 +87,8 @@ namespace SimSharp {
     }
   }
 
-  public class PseudoRealtimeProcess : Process {
+  public class PseudoRealtimeProcessAsync : ProcessAsync {
     public double RealtimeScale { get; set; }
-
     public new PseudoRealtimeSimulation Environment {
       get { return (PseudoRealtimeSimulation)base.Environment; }
     }
@@ -112,7 +102,7 @@ namespace SimSharp {
     /// <param name="generator">The generator function of the process.</param>
     /// <param name="priority">The priority if multiple processes are started at the same time.</param>
     /// <param name="realtimeScale">A value strictly greater than 0 used to scale real time events (1 = realtime).</param>
-    public PseudoRealtimeProcess(PseudoRealtimeSimulation environment, IEnumerable<Event> generator, int priority = 0, double realtimeScale = PseudoRealtimeSimulation.DefaultRealtimeScale)
+    public PseudoRealtimeProcessAsync(PseudoRealtimeSimulation environment, IAsyncEnumerable<Event> generator, int priority = 0, double realtimeScale = PseudoRealtimeSimulation.DefaultRealtimeScale)
       : base(environment, generator, priority) {
       RealtimeScale = realtimeScale;
     }

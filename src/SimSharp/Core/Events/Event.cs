@@ -7,6 +7,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace SimSharp {
   /// <summary>
@@ -25,7 +27,7 @@ namespace SimSharp {
   /// </summary>
   public class Event {
     protected internal Simulation Environment { get; private set; }
-    protected List<Action<Event>> CallbackList { get; set; }
+    protected List<IEventAction> CallbackList { get; set; }
 
     /// <summary>
     /// The value property can be used to return arbitrary data from a
@@ -63,7 +65,7 @@ namespace SimSharp {
 
     public Event(Simulation environment) {
       Environment = environment;
-      CallbackList = new List<Action<Event>>();
+      CallbackList = new List<IEventAction>();
     }
 
     /// <summary>
@@ -137,7 +139,18 @@ namespace SimSharp {
     /// processed.</param>
     public virtual void AddCallback(Action<Event> callback) {
       if (IsProcessed) throw new InvalidOperationException("Event is already processed.");
-      CallbackList.Add(callback);
+      CallbackList.Add(new EventAction(callback));
+    }
+    
+    /// <summary>
+    /// This method adds a callback to the list of callbacks. Callbacks will be
+    /// executed in the order they have been added.
+    /// </summary>
+    /// <param name="callback">The callback to execute when the event is being
+    /// processed.</param>
+    public virtual void AddCallback(Func<Event, Task> callback) {
+      if (IsProcessed) throw new InvalidOperationException("Event is already processed.");
+      CallbackList.Add(new EventActionAsync(callback));
     }
 
     /// <summary>
@@ -148,7 +161,18 @@ namespace SimSharp {
     /// processed.</param>
     public virtual void AddCallbacks(IEnumerable<Action<Event>> callbacks) {
       if (IsProcessed) throw new InvalidOperationException("Event is already processed.");
-      CallbackList.AddRange(callbacks);
+      CallbackList.AddRange(callbacks.Select(c => new EventAction(c)));
+    }
+    
+    /// <summary>
+    /// This method adds a range of callbacks to the list of callbacks. Callbacks
+    /// will be executed in the order they have been added.
+    /// </summary>
+    /// <param name="callbacks">The callbacks to execute when the event is being
+    /// processed.</param>
+    public virtual void AddCallbacks(IEnumerable<Func<Event, Task>> callbacks) {
+      if (IsProcessed) throw new InvalidOperationException("Event is already processed.");
+      CallbackList.AddRange(callbacks.Select(c => new EventActionAsync(c)));
     }
 
     /// <summary>
@@ -161,7 +185,20 @@ namespace SimSharp {
     /// <param name="callback">The callback to remove.</param>
     public virtual void RemoveCallback(Action<Event> callback) {
       if (IsProcessed) throw new InvalidOperationException("Event is already processed.");
-      CallbackList.Remove(callback);
+      CallbackList.Remove(new EventAction(callback));
+    }
+    
+    /// <summary>
+    /// This method removes a callback to the list of callbacks.
+    /// </summary>
+    /// <remarks>
+    /// It is not checked if the callback has actually been added before and
+    /// no exception will be thrown if it had not been present.
+    /// </remarks>
+    /// <param name="callback">The callback to remove.</param>
+    public virtual void RemoveCallback(Func<Event, Task> callback) {
+      if (IsProcessed) throw new InvalidOperationException("Event is already processed.");
+      CallbackList.Remove(new EventActionAsync(callback));
     }
 
     /// <summary>
@@ -171,11 +208,23 @@ namespace SimSharp {
     /// </summary>
     /// <exception cref="InvalidOperationException">When the event has already
     /// been processed.</exception>
-    public virtual void Process() {
+    public virtual async Task Process() {
       if (IsProcessed) throw new InvalidOperationException("Event has already been processed.");
       IsProcessed = true;
-      for (var i = 0; i < CallbackList.Count; i++)
-        CallbackList[i](this);
+      for (var i = 0; i < CallbackList.Count; i++) {
+        var iEventAction = CallbackList[i];
+        switch (iEventAction)
+        {
+          case EventActionAsync eventActionAsync:
+            await eventActionAsync.Event(this);
+            break;
+          case EventAction eventAction:
+            eventAction.Event(this);
+            break;
+          default:
+            throw new InvalidOperationException($"EventAction of type {iEventAction.GetType().Name} is not a processable action");
+        }
+      }
       CallbackList = null;
     }
 

@@ -12,6 +12,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using SimSharp.Async;
 
 namespace SimSharp {
   /// <summary>
@@ -58,7 +59,7 @@ namespace SimSharp {
     protected IRandom Random { get; set; }
 
     protected EventQueue ScheduleQ;
-    public Process ActiveProcess { get; set; }
+    public ProcessBase ActiveProcess { get; set; }
 
     public TextWriter Logger { get; set; }
     public int ProcessedEvents { get; protected set; }
@@ -94,6 +95,17 @@ namespace SimSharp {
     /// <returns>The scheduled process that was created.</returns>
     public Process Process(IEnumerable<Event> generator, int priority = 0) {
       return new Process(this, generator, priority);
+    }
+
+    /// <summary>
+    /// Creates a new async process from an event generator. The process is automatically
+    /// scheduled to be started at the current simulation time.
+    /// </summary>
+    /// <param name="generator">The generator function that represents the process.</param>
+    /// <param name="priority">The priority to rank events at the same time (smaller value = higher priority).</param>
+    /// <returns>The scheduled process that was created.</returns>
+    public ProcessAsync Process(IAsyncEnumerable<Event> generator, int priority = 0) {
+      return new ProcessAsync(this, generator, priority);
     }
 
     /// <summary>
@@ -164,25 +176,42 @@ namespace SimSharp {
     }
 
     public virtual object RunD(double? until = null) {
-      if (!until.HasValue) return Run();
-      return Run(Now + TimeSpan.FromSeconds(DefaultTimeStepSeconds * until.Value));
+      return RunDAsync(until).GetAwaiter().GetResult();
+    }
+    
+    public virtual Task<object> RunDAsync(double? until = null) {
+      if (!until.HasValue) return RunAsync();
+      return RunAsync(Now + TimeSpan.FromSeconds(DefaultTimeStepSeconds * until.Value));
+    }
+    
+    public virtual object Run(TimeSpan span) {
+      return RunAsync(Now + span).GetAwaiter().GetResult();
     }
 
-    public virtual object Run(TimeSpan span) {
-      return Run(Now + span);
+    public virtual Task<object> RunAsync(TimeSpan span) {
+      return RunAsync(Now + span);
     }
 
     public virtual object Run(DateTime until) {
+      return RunAsync(until).GetAwaiter().GetResult();
+    }
+
+    public virtual Task<object> RunAsync(DateTime until) {
       if (until <= Now) throw new InvalidOperationException("Simulation end date must lie in the future.");
       var stopEvent = new Event(this);
       var node = DoSchedule(until, stopEvent);
       // stop event is always the first to execute at the given time
       node.InsertionIndex = -1;
       ScheduleQ.OnNodeUpdated(node);
-      return Run(stopEvent);
+      return RunAsync(stopEvent);
     }
 
     protected CancellationTokenSource _stop = null;
+
+    public virtual object Run(Event stopEvent = null) {
+      return RunAsync(stopEvent).GetAwaiter().GetResult();
+    }
+
     /// <summary>
     /// Run until a certain event is processed.
     /// </summary>
@@ -196,7 +225,7 @@ namespace SimSharp {
     /// </remarks>
     /// <param name="stopEvent">The event that stops the simulation.</param>
     /// <returns></returns>
-    public virtual object Run(Event stopEvent = null) {
+    public virtual async Task<object> RunAsync(Event stopEvent = null) {
       _stop = new CancellationTokenSource();
       if (stopEvent != null) {
         if (stopEvent.IsProcessed) {
@@ -208,7 +237,7 @@ namespace SimSharp {
       try {
         var stop = ScheduleQ.Count == 0 || _stop.IsCancellationRequested;
         while (!stop) {
-          Step();
+          await Step();
           stop = ScheduleQ.Count == 0 || _stop.IsCancellationRequested;
         }
       } catch (StopSimulationException e) { OnRunFinished(); return e.Value; }
@@ -238,12 +267,11 @@ namespace SimSharp {
     /// <remarks>
     /// This method is not thread-safe
     /// </remarks>
-    public virtual void Step() {
-      Event evt;
+    public virtual async Task Step() {
       var next = ScheduleQ.Dequeue();
       Now = next.PrimaryPriority;
-      evt = next.Event;
-      evt.Process();
+      var evt = next.Event;
+      await evt.Process();
       ProcessedEvents++;
     }
 
@@ -1071,7 +1099,7 @@ namespace SimSharp {
     /// </remarks>
     /// <param name="stopEvent">The event that stops the simulation.</param>
     /// <returns></returns>
-    public override object Run(Event stopEvent = null) {
+    public override async Task<object> RunAsync(Event stopEvent = null) {
       _stop = new CancellationTokenSource();
       if (stopEvent != null) {
         if (stopEvent.IsProcessed) {
@@ -1086,7 +1114,7 @@ namespace SimSharp {
           stop = ScheduleQ.Count == 0 || _stop.IsCancellationRequested;
         }
         while (!stop) {
-          Step();
+          await Step();
           lock (_locker) {
             stop = ScheduleQ.Count == 0 || _stop.IsCancellationRequested;
           }
@@ -1098,12 +1126,12 @@ namespace SimSharp {
       return stopEvent.Value;
     }
 
-    public Task<object> RunAsync(TimeSpan duration) {
-      return Task.Run(() => Run(duration));
+    public override Task<object> RunAsync(TimeSpan duration) {
+      return Task.Run(async() => await base.RunAsync(duration));
     }
 
-    public Task<object> RunAsync(DateTime until) {
-      return Task.Run(() => Run(until));
+    public override Task<object> RunAsync(DateTime until) {
+      return Task.Run(async() => await base.RunAsync(until));
     }
 
     /// <summary>
@@ -1111,8 +1139,8 @@ namespace SimSharp {
     /// </summary>
     /// <param name="stopEvent">The event that stops the simulation.</param>
     /// <returns></returns>
-    public Task<object> RunAsync(Event stopEvent = null) {
-      return Task.Run(() => Run(stopEvent));
+    public Task<object> RunWithoutBlockingAsync(Event stopEvent = null) {
+      return Task.Run(async() => await RunAsync(stopEvent));
     }
 
     /// <summary>
@@ -1121,14 +1149,14 @@ namespace SimSharp {
     /// <remarks>
     /// This method is thread-safe against manipulations of the event queue
     /// </remarks>
-    public override void Step() {
+    public override async Task Step() {
       Event evt;
       lock (_locker) {
         var next = ScheduleQ.Dequeue();
         Now = next.PrimaryPriority;
         evt = next.Event;
       }
-      evt.Process();
+      await evt.Process();
       ProcessedEvents++;
     }
 
@@ -1213,7 +1241,7 @@ namespace SimSharp {
       return base.DoSchedule(date, @event, priority);
     }
 
-    public override void Step() {
+    public override async Task Step() {
       var delay = TimeSpan.Zero;
       double? rtScale = null;
       lock (_locker) {
@@ -1253,7 +1281,7 @@ namespace SimSharp {
         }
         evt = next.Event;
       }
-      evt.Process();
+      await evt.Process();
       ProcessedEvents++;
     }
 

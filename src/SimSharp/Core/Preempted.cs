@@ -9,10 +9,10 @@ using System;
 
 namespace SimSharp {
   public sealed class Preempted {
-    public Process By { get; private set; }
+    public ProcessBase By { get; private set; }
     public DateTime UsageSince { get; private set; }
 
-    public Preempted(Process by, DateTime usageSince) {
+    public Preempted(ProcessBase by, DateTime usageSince) {
       By = by;
       UsageSince = usageSince;
     }

@@ -20,7 +20,7 @@ namespace SimSharp {
   /// </summary>
   /// <remarks>
   /// Working with PreemptiveResource, a process holding a request must always call
-  /// <see cref="Process.HandleFault"/> after yielding an event and handle a potential
+  /// <see cref="ProcessBase.HandleFault"/> after yielding an event and handle a potential
   /// interruption.
   /// </remarks>
   public class PreemptiveResource {

@@ -11,11 +11,11 @@ namespace SimSharp {
   public class Request : Event, IDisposable {
     private readonly Action<Event> disposeCallback;
     public DateTime Time { get; private set; }
-    public Process Owner { get; set; }
+    public ProcessBase Owner { get; set; }
 
     public Request(Simulation environment, Action<Event> callback, Action<Event> disposeCallback)
       : base(environment) {
-      CallbackList.Add(callback);
+      CallbackList.Add(new EventAction(callback));
       this.disposeCallback = disposeCallback;
       Time = environment.Now;
       Owner = environment.ActiveProcess;

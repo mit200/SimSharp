@@ -14,7 +14,7 @@ namespace SimSharp {
     public Release(Simulation environment, Request request, Action<Event> callback)
       : base(environment) {
       Request = request;
-      CallbackList.Add(callback);
+      CallbackList.Add(new EventAction(callback));
     }
   }
 }

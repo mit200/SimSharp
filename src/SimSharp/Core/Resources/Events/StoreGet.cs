@@ -10,11 +10,11 @@ using System;
 namespace SimSharp {
   public class StoreGet : Event {
     public DateTime Time { get; private set; }
-    public Process Owner { get; set; }
+    public ProcessBase Owner { get; set; }
 
     public StoreGet(Simulation environment, Action<Event> callback)
       : base(environment) {
-      CallbackList.Add(callback);
+      CallbackList.Add(new EventAction(callback));
       Time = environment.Now;
       Owner = environment.ActiveProcess;
     }
