@@ -1339,6 +1339,20 @@ namespace SimSharp {
     public Process PseudoRealtimeProcess(IEnumerable<Event> generator, int priority = 0, double realtimeScale = DefaultRealtimeScale) {
       return new PseudoRealtimeProcess(this, generator, priority, realtimeScale);
     }
+
+    /// <summary>
+    /// This is only a convenience for mixed real- and virtual time simulations.
+    /// It creates a new pseudo realtime process which will set the simulation
+    /// to realtime every time it continues (e.g., if it has been set to virtual time).
+    /// The process is automatically scheduled to be started at the current simulation time.
+    /// </summary>
+    /// <param name="generator">The generator function that represents the process.</param>
+    /// <param name="priority">The priority to rank events at the same time (smaller value = higher priority).</param>
+    /// <param name="realtimeScale">A value strictly greater than 0 used to scale real time events (1 = realtime).</param>
+    /// <returns>The scheduled process that was created.</returns>
+    public ProcessAsync PseudoRealtimeProcess(IAsyncEnumerable<Event> generator, int priority = 0, double realtimeScale = DefaultRealtimeScale) {
+      return new PseudoRealtimeProcessAsync(this, generator, priority, realtimeScale);
+    }
   }
 
   /// <summary>

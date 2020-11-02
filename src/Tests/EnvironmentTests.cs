@@ -310,5 +310,27 @@ namespace SimSharp.Tests {
       Assert.True(elapsed >= TimeSpan.FromMilliseconds(1000), $"c {elapsed.TotalMilliseconds} >= 1000");
       env.SetVirtualtime();
     }
+    
+    
+
+    [Fact]
+    public async void PseudoRealtimeMultiThreadedTest2Async() {
+      var env = new PseudoRealtimeSimulation();
+      env.PseudoRealtimeProcess(AnotherMultiThreadedRealtimeProcessAsync(env));
+      var sw = Stopwatch.StartNew();
+      await env.RunAsync();
+      Assert.True(sw.Elapsed >= TimeSpan.FromSeconds(1.5), $"a {sw.Elapsed.TotalMilliseconds} >= 1500");
+    }
+
+    private async IAsyncEnumerable<Event> AnotherMultiThreadedRealtimeProcessAsync(PseudoRealtimeSimulation env) {
+      Task.Run(() => AnotherMultiThreadInteractor(env));
+      var simulatedDelay = TimeSpan.FromSeconds(5);
+      var sw = Stopwatch.StartNew();
+      yield return env.Timeout(simulatedDelay);
+      var elapsed = sw.Elapsed;
+      Assert.True(elapsed < (env.Now - env.StartDate), $"b {elapsed.TotalMilliseconds} < {(env.Now - env.StartDate).TotalMilliseconds}");
+
+      await Task.CompletedTask;
+    }
   }
 }
